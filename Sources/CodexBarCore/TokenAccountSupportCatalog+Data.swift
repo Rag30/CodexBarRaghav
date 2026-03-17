@@ -2,6 +2,13 @@ import Foundation
 
 extension TokenAccountSupportCatalog {
     static let supportByProvider: [UsageProvider: TokenAccountSupport] = [
+        .codex: TokenAccountSupport(
+            title: "Codex accounts",
+            subtitle: "Store CODEX_HOME paths for multiple OpenAI accounts. Sign in with: CODEX_HOME=~/.codex-account2 codex",
+            placeholder: "~/.codex-account2",
+            injection: .codexHome,
+            requiresManualCookieSource: false,
+            cookieName: nil),
         .claude: TokenAccountSupport(
             title: "Session tokens",
             subtitle: "Store Claude sessionKey cookies or OAuth access tokens.",

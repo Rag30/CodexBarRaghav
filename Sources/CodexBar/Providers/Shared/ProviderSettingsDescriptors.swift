@@ -91,6 +91,8 @@ struct ProviderSettingsTokenAccountsDescriptor: Identifiable {
     let title: String
     let subtitle: String
     let placeholder: String
+    /// When false, the token input is shown as plain text (e.g. file paths). Defaults to true.
+    let isSecureToken: Bool
     let provider: UsageProvider
     let isVisible: (() -> Bool)?
     let accounts: () -> [ProviderTokenAccount]
@@ -98,8 +100,21 @@ struct ProviderSettingsTokenAccountsDescriptor: Identifiable {
     let setActiveIndex: (Int) -> Void
     let addAccount: (_ label: String, _ token: String) -> Void
     let removeAccount: (_ accountID: UUID) -> Void
+    let renameAccount: (_ accountID: UUID, _ newLabel: String) -> Void
     let openConfigFile: () -> Void
     let reloadFromDisk: () -> Void
+    /// When set, the default (non-token-account) account label is shown as the first tab.
+    /// Returns the display label (e.g. email) for the default account, or nil if unavailable.
+    let defaultAccountLabel: (() -> String?)?
+    /// When set, allows the user to set a custom display name for the default account.
+    let renameDefaultAccount: ((_ newLabel: String) -> Void)?
+    /// When set, shows a "Sign in to new account" button that calls this closure.
+    /// The closure receives progress and addAccount callbacks; it adds the account itself and returns
+    /// true on success or false on failure/cancellation.
+    let loginAction: ((
+        _ setProgress: @escaping @MainActor (String) -> Void,
+        _ addAccount: @escaping @MainActor (String, String) -> Void
+    ) async -> Bool)?
 }
 
 /// Shared picker descriptor rendered in the Providers settings pane.

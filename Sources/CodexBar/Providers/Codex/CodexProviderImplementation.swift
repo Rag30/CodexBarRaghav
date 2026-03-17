@@ -196,4 +196,64 @@ struct CodexProviderImplementation: ProviderImplementation {
         await context.controller.runCodexLoginFlow()
         return true
     }
+
+    @MainActor
+    func tokenAccountDefaultLabel(settings: SettingsStore?) -> String? {
+        // Prefer any user-set custom nickname stored in settings.
+        if let custom = settings?.providerConfig(for: .codex)?.defaultAccountLabel,
+           !custom.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            return custom
+        }
+        // Fall back to email extracted from the default ~/.codex/auth.json JWT.
+        guard let credentials = try? CodexOAuthCredentialsStore.load(),
+              let idToken = credentials.idToken,
+              let payload = UsageFetcher.parseJWT(idToken)
+        else { return "Default account" }
+        let profileDict = payload["https://api.openai.com/profile"] as? [String: Any]
+        let email = (payload["email"] as? String) ?? (profileDict?["email"] as? String)
+        return email?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Default account"
+    }
+
+    @MainActor
+    func tokenAccountLoginAction(context _: ProviderSettingsContext)
+        -> ((
+            _ setProgress: @escaping @MainActor (String) -> Void,
+            _ addAccount: @escaping @MainActor (String, String) -> Void
+        ) async -> Bool)?
+    {
+        return { @MainActor setProgress, addAccount in
+            let accountsDir = (("~/.codex-accounts") as NSString).expandingTildeInPath
+            let uniqueDir = "\(accountsDir)/\(UUID().uuidString.prefix(8))"
+            try? FileManager.default.createDirectory(
+                atPath: uniqueDir,
+                withIntermediateDirectories: true)
+
+            setProgress("Opening browser for login…")
+            let result = await CodexLoginRunner.run(codexHome: uniqueDir, timeout: 180)
+
+            switch result.outcome {
+            case .success:
+                setProgress("Signed in — reading account info…")
+                let env = ["CODEX_HOME": uniqueDir]
+                let label: String
+                if let credentials = try? CodexOAuthCredentialsStore.load(env: env),
+                   let idToken = credentials.idToken,
+                   let payload = UsageFetcher.parseJWT(idToken)
+                {
+                    let profileDict = payload["https://api.openai.com/profile"] as? [String: Any]
+                    let email = (payload["email"] as? String) ?? (profileDict?["email"] as? String)
+                    label = email?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Account"
+                } else {
+                    label = "Account"
+                }
+                addAccount(label, uniqueDir)
+                return true
+
+            case .missingBinary, .timedOut, .failed, .launchFailed:
+                try? FileManager.default.removeItem(atPath: uniqueDir)
+                return false
+            }
+        }
+    }
 }
