@@ -55,6 +55,15 @@ struct ProviderDetailView: View {
                     labelWidth: labelWidth,
                     onRefresh: self.onRefresh)
 
+                // Accounts section shown prominently at the top, before usage metrics.
+                if let tokenAccounts = self.settingsTokenAccounts,
+                   tokenAccounts.isVisible?() ?? true
+                {
+                    ProviderSettingsSection(title: "Accounts") {
+                        ProviderSettingsTokenAccountsRowView(descriptor: tokenAccounts)
+                    }
+                }
+
                 ProviderMetricsInlineView(
                     provider: self.provider,
                     model: self.model,
@@ -73,11 +82,6 @@ struct ProviderDetailView: View {
                     ProviderSettingsSection(title: "Settings") {
                         ForEach(self.settingsPickers) { picker in
                             ProviderSettingsPickerRowView(picker: picker)
-                        }
-                        if let tokenAccounts = self.settingsTokenAccounts,
-                           tokenAccounts.isVisible?() ?? true
-                        {
-                            ProviderSettingsTokenAccountsRowView(descriptor: tokenAccounts)
                         }
                         ForEach(self.settingsFields) { field in
                             ProviderSettingsFieldRowView(field: field)
@@ -102,8 +106,7 @@ struct ProviderDetailView: View {
 
     private var hasSettings: Bool {
         !self.settingsPickers.isEmpty ||
-            !self.settingsFields.isEmpty ||
-            self.settingsTokenAccounts != nil
+            !self.settingsFields.isEmpty
     }
 
     private var detailLabelWidth: CGFloat {

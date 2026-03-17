@@ -168,11 +168,24 @@ struct ProvidersPane: View {
     func tokenAccountDescriptor(for provider: UsageProvider) -> ProviderSettingsTokenAccountsDescriptor? {
         guard let support = TokenAccountSupportCatalog.support(for: provider) else { return nil }
         let context = self.makeSettingsContext(provider: provider)
+        let isSecureToken: Bool = {
+            if case .codexHome = support.injection { return false }
+            return true
+        }()
+        let impl = ProviderCatalog.implementation(for: provider)
+        let loginAction = impl?.tokenAccountLoginAction(context: context)
+        let defaultAccountLabel: (() -> String?)? = impl.map { imp in
+            { imp.tokenAccountDefaultLabel(settings: self.settings) }
+        }
+        let renameDefaultAccount: ((_ newLabel: String) -> Void)? = impl.map { _ in
+            { newLabel in self.settings.setDefaultAccountLabel(provider: provider, label: newLabel) }
+        }
         return ProviderSettingsTokenAccountsDescriptor(
             id: "token-accounts-\(provider.rawValue)",
             title: support.title,
             subtitle: support.subtitle,
             placeholder: support.placeholder,
+            isSecureToken: isSecureToken,
             provider: provider,
             isVisible: {
                 ProviderCatalog.implementation(for: provider)?
@@ -209,6 +222,9 @@ struct ProvidersPane: View {
                     }
                 }
             },
+            renameAccount: { accountID, newLabel in
+                self.settings.renameTokenAccount(provider: provider, accountID: accountID, newLabel: newLabel)
+            },
             openConfigFile: {
                 self.settings.openTokenAccountsFile()
             },
@@ -219,7 +235,10 @@ struct ProvidersPane: View {
                         await self.store.refreshProvider(provider, allowDisabled: true)
                     }
                 }
-            })
+            },
+            defaultAccountLabel: defaultAccountLabel,
+            renameDefaultAccount: renameDefaultAccount,
+            loginAction: loginAction)
     }
 
     private func makeSettingsContext(provider: UsageProvider) -> ProviderSettingsContext {

@@ -14,13 +14,15 @@ extension SettingsStore {
 
     func selectedTokenAccount(for provider: UsageProvider) -> ProviderTokenAccount? {
         guard let data = self.tokenAccountsData(for: provider), !data.accounts.isEmpty else { return nil }
+        guard !data.isDefaultActive else { return nil }
         let index = data.clampedActiveIndex()
         return data.accounts[index]
     }
 
     func setActiveTokenAccountIndex(_ index: Int, for provider: UsageProvider) {
         guard let data = self.tokenAccountsData(for: provider), !data.accounts.isEmpty else { return }
-        let clamped = min(max(index, 0), data.accounts.count - 1)
+        // index == -1 means "use default account" (no CODEX_HOME override)
+        let clamped = index < 0 ? -1 : min(max(index, 0), data.accounts.count - 1)
         let updated = ProviderTokenAccountData(
             version: data.version,
             accounts: data.accounts,
@@ -64,6 +66,30 @@ extension SettingsStore {
                 "provider": provider.rawValue,
                 "count": "\(updated.accounts.count)",
             ])
+    }
+
+    func renameTokenAccount(provider: UsageProvider, accountID: UUID, newLabel: String) {
+        guard let data = self.tokenAccountsData(for: provider) else { return }
+        let trimmed = newLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let updated = ProviderTokenAccountData(
+            version: data.version,
+            accounts: data.accounts.map { account in
+                var a = account
+                if a.id == accountID { a.label = trimmed }
+                return a
+            },
+            activeIndex: data.activeIndex)
+        self.updateProviderConfig(provider: provider) { entry in
+            entry.tokenAccounts = updated
+        }
+    }
+
+    func setDefaultAccountLabel(provider: UsageProvider, label: String) {
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.updateProviderConfig(provider: provider) { entry in
+            entry.defaultAccountLabel = trimmed.isEmpty ? nil : trimmed
+        }
     }
 
     func removeTokenAccount(provider: UsageProvider, accountID: UUID) {

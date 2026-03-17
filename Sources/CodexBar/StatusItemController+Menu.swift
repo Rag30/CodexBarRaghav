@@ -61,6 +61,7 @@ extension StatusItemController {
         let activeIndex: Int
         let showAll: Bool
         let showSwitcher: Bool
+        let defaultAccountLabel: String?
     }
 
     private func menuCardWidth(for providers: [UsageProvider], menu: NSMenu? = nil) -> CGFloat {
@@ -597,6 +598,7 @@ extension StatusItemController {
     {
         let view = TokenAccountSwitcherView(
             accounts: display.accounts,
+            defaultAccountLabel: display.defaultAccountLabel,
             selectedIndex: display.activeIndex,
             width: self.menuCardWidth(for: self.store.enabledProvidersForDisplay(), menu: menu),
             onSelect: { [weak self, weak menu] index in
@@ -604,12 +606,14 @@ extension StatusItemController {
                 self.settings.setActiveTokenAccountIndex(index, for: display.provider)
                 Task { @MainActor in
                     await ProviderInteractionContext.$current.withValue(.userInitiated) {
-                        await self.store.refresh()
+                        // Use refreshProvider (not refresh) so it always runs even if a global
+                        // refresh is currently in progress (refresh() has an isRefreshing guard).
+                        await self.store.refreshProvider(display.provider, allowDisabled: true)
                     }
+                    self.applyIcon(phase: nil)
                 }
                 self.populateMenu(menu, provider: display.provider)
                 self.markMenuFresh(menu)
-                self.applyIcon(phase: nil)
             })
         let item = NSMenuItem()
         item.view = view
@@ -647,8 +651,13 @@ extension StatusItemController {
     private func tokenAccountMenuDisplay(for provider: UsageProvider) -> TokenAccountMenuDisplay? {
         guard TokenAccountSupportCatalog.support(for: provider) != nil else { return nil }
         let accounts = self.settings.tokenAccounts(for: provider)
-        guard accounts.count > 1 else { return nil }
-        let activeIndex = self.settings.tokenAccountsData(for: provider)?.clampedActiveIndex() ?? 0
+        let defaultLabel = ProviderCatalog.implementation(for: provider)?.tokenAccountDefaultLabel(settings: self.settings)
+        // Show switcher when there's a default account + at least 1 token account, or 2+ token accounts
+        let hasMultiple = accounts.count >= 1 && defaultLabel != nil || accounts.count > 1
+        guard hasMultiple else { return nil }
+        // Use raw activeIndex so -1 (default account selected) passes through
+        let rawActiveIndex = self.settings.tokenAccountsData(for: provider)?.activeIndex ?? -1
+        let activeIndex = rawActiveIndex < 0 ? -1 : min(rawActiveIndex, max(0, accounts.count - 1))
         let showAll = self.settings.showAllTokenAccountsInMenu
         let snapshots = showAll ? (self.store.accountSnapshots[provider] ?? []) : []
         return TokenAccountMenuDisplay(
@@ -657,7 +666,8 @@ extension StatusItemController {
             snapshots: snapshots,
             activeIndex: activeIndex,
             showAll: showAll,
-            showSwitcher: !showAll)
+            showSwitcher: !showAll,
+            defaultAccountLabel: defaultLabel)
     }
 
     private func menuNeedsRefresh(_ menu: NSMenu) -> Bool {

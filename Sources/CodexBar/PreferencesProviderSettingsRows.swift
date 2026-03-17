@@ -1,3 +1,4 @@
+import CodexBarCore
 import SwiftUI
 
 struct ProviderSettingsSection<Content: View>: View {
@@ -205,6 +206,16 @@ struct ProviderSettingsTokenAccountsRowView: View {
     let descriptor: ProviderSettingsTokenAccountsDescriptor
     @State private var newLabel: String = ""
     @State private var newToken: String = ""
+    @State private var isSigningIn: Bool = false
+    @State private var signInProgress: String = ""
+    @State private var signInError: String = ""
+    /// ID of the token account currently being renamed (nil = none).
+    @State private var renamingAccountID: UUID? = nil
+    /// Whether the default account tab is being renamed.
+    @State private var renamingDefault: Bool = false
+    /// Current text inside the active rename field.
+    @State private var renameText: String = ""
+    @FocusState private var renameFieldFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -219,55 +230,32 @@ struct ProviderSettingsTokenAccountsRowView: View {
             }
 
             let accounts = self.descriptor.accounts()
-            if accounts.isEmpty {
-                Text("No token accounts yet.")
+            let defaultLabel = self.descriptor.defaultAccountLabel?()
+            let hasDefaultTab = defaultLabel != nil
+            // activeIndex < 0 means the default account is selected
+            let activeIndex = self.descriptor.activeIndex()
+            let defaultIsActive = activeIndex < 0 || (accounts.isEmpty && hasDefaultTab)
+            let selectedIndex = defaultIsActive ? -1 : min(activeIndex, max(0, accounts.count - 1))
+
+            if !hasDefaultTab && accounts.isEmpty {
+                Text("No accounts added yet.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
-                let selectedIndex = min(self.descriptor.activeIndex(), max(0, accounts.count - 1))
-                Picker("", selection: Binding(
-                    get: { selectedIndex },
-                    set: { index in self.descriptor.setActiveIndex(index) }))
-                {
-                    ForEach(Array(accounts.enumerated()), id: \.offset) { index, account in
-                        Text(account.displayName).tag(index)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .controlSize(.small)
-
-                Button("Remove selected account") {
-                    let account = accounts[selectedIndex]
-                    self.descriptor.removeAccount(account.id)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                self.accountTabsView(
+                    defaultLabel: defaultLabel,
+                    accounts: accounts,
+                    selectedIndex: selectedIndex)
             }
 
-            HStack(spacing: 8) {
-                TextField("Label", text: self.$newLabel)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.footnote)
-                SecureField(self.descriptor.placeholder, text: self.$newToken)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.footnote)
-                Button("Add") {
-                    let label = self.newLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let token = self.newToken.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !label.isEmpty, !token.isEmpty else { return }
-                    self.descriptor.addAccount(label, token)
-                    self.newLabel = ""
-                    self.newToken = ""
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(self.newLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                    self.newToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            if let loginAction = self.descriptor.loginAction {
+                self.signInSection(loginAction: loginAction, addAccount: self.descriptor.addAccount)
+            } else {
+                self.manualAddSection()
             }
 
             HStack(spacing: 10) {
-                Button("Open token file") {
+                Button("Open config file") {
                     self.descriptor.openConfigFile()
                 }
                 .buttonStyle(.link)
@@ -278,6 +266,234 @@ struct ProviderSettingsTokenAccountsRowView: View {
                 .buttonStyle(.link)
                 .controlSize(.small)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func accountTabsView(
+        defaultLabel: String?,
+        accounts: [ProviderTokenAccount],
+        selectedIndex: Int) -> some View
+    {
+        FlowLayout(spacing: 6) {
+            if let defaultLabel {
+                self.defaultAccountTab(label: defaultLabel, isActive: selectedIndex < 0)
+            }
+            ForEach(Array(accounts.enumerated()), id: \.1.id) { index, account in
+                self.accountTab(account: account, index: index, isActive: index == selectedIndex)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func defaultAccountTab(label: String, isActive: Bool) -> some View {
+        let isRenaming = self.renamingDefault && self.descriptor.renameDefaultAccount != nil
+        HStack(spacing: 5) {
+            Image(systemName: "person.circle.fill")
+                .foregroundStyle(isActive ? Color.accentColor : .secondary)
+                .imageScale(.small)
+            if isRenaming {
+                TextField("Name", text: self.$renameText)
+                    .font(.footnote)
+                    .textFieldStyle(.plain)
+                    .frame(minWidth: 60, maxWidth: 160)
+                    .focused(self.$renameFieldFocused)
+                    .onSubmit { self.commitRenameDefault() }
+            } else {
+                Button(action: { self.descriptor.setActiveIndex(-1) }) {
+                    Text(label)
+                        .font(.footnote)
+                        .lineLimit(1)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(isActive ? Color.accentColor : .primary)
+                if self.descriptor.renameDefaultAccount != nil {
+                    Button(action: {
+                        self.renameText = label
+                        self.renamingDefault = true
+                        self.renamingAccountID = nil
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            self.renameFieldFocused = true
+                        }
+                    }) {
+                        Image(systemName: "pencil")
+                            .foregroundStyle(.secondary)
+                            .imageScale(.small)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isActive
+                    ? Color.accentColor.opacity(0.15)
+                    : Color(NSColor.controlBackgroundColor))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(isActive
+                            ? Color.accentColor.opacity(0.4)
+                            : Color(NSColor.separatorColor),
+                            lineWidth: 1)))
+        .onChange(of: self.renameFieldFocused) { _, focused in
+            if !focused && self.renamingDefault { self.commitRenameDefault() }
+        }
+    }
+
+    private func commitRenameDefault() {
+        let trimmed = self.renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            self.descriptor.renameDefaultAccount?(trimmed)
+        }
+        self.renamingDefault = false
+        self.renameText = ""
+    }
+
+    @ViewBuilder
+    private func accountTab(account: ProviderTokenAccount, index: Int, isActive: Bool) -> some View {
+        let isRenaming = self.renamingAccountID == account.id
+        HStack(spacing: 4) {
+            if isRenaming {
+                TextField("Name", text: self.$renameText)
+                    .font(.footnote)
+                    .textFieldStyle(.plain)
+                    .frame(minWidth: 60, maxWidth: 160)
+                    .focused(self.$renameFieldFocused)
+                    .onSubmit { self.commitRename(account: account) }
+            } else {
+                Button(action: { self.descriptor.setActiveIndex(index) }) {
+                    Text(account.displayName)
+                        .font(.footnote)
+                        .lineLimit(1)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(isActive ? Color.accentColor : .primary)
+                Button(action: {
+                    self.renameText = account.displayName
+                    self.renamingAccountID = account.id
+                    self.renamingDefault = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        self.renameFieldFocused = true
+                    }
+                }) {
+                    Image(systemName: "pencil")
+                        .foregroundStyle(.secondary)
+                        .imageScale(.small)
+                }
+                .buttonStyle(.plain)
+            }
+
+            Button(action: { self.descriptor.removeAccount(account.id) }) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+                    .imageScale(.small)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isActive
+                    ? Color.accentColor.opacity(0.15)
+                    : Color(NSColor.controlBackgroundColor))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(isActive
+                            ? Color.accentColor.opacity(0.4)
+                            : Color(NSColor.separatorColor),
+                            lineWidth: 1)))
+        .onChange(of: self.renameFieldFocused) { _, focused in
+            if !focused, self.renamingAccountID == account.id { self.commitRename(account: account) }
+        }
+    }
+
+    private func commitRename(account: ProviderTokenAccount) {
+        let trimmed = self.renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            self.descriptor.renameAccount(account.id, trimmed)
+        }
+        self.renamingAccountID = nil
+        self.renameText = ""
+    }
+
+    @ViewBuilder
+    private func signInSection(
+        loginAction: @escaping (
+            _ setProgress: @escaping @MainActor (String) -> Void,
+            _ addAccount: @escaping @MainActor (String, String) -> Void
+        ) async -> Bool,
+        addAccount: @escaping (String, String) -> Void) -> some View
+    {
+        VStack(alignment: .leading, spacing: 6) {
+            if self.isSigningIn {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(self.signInProgress.isEmpty ? "Starting login…" : self.signInProgress)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                Button("Sign in to new account") {
+                    self.signInError = ""
+                    self.isSigningIn = true
+                    self.signInProgress = "Opening browser for login…"
+                    Task { @MainActor in
+                        let success = await loginAction(
+                            { @MainActor progress in self.signInProgress = progress },
+                            { @MainActor label, token in addAccount(label, token) })
+                        self.isSigningIn = false
+                        self.signInProgress = ""
+                        if !success {
+                            self.signInError = "Login failed or was cancelled. Try again."
+                        }
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+
+            if !self.signInError.isEmpty {
+                Text(self.signInError)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func manualAddSection() -> some View {
+        HStack(spacing: 8) {
+            TextField("Label", text: self.$newLabel)
+                .textFieldStyle(.roundedBorder)
+                .font(.footnote)
+            if self.descriptor.isSecureToken {
+                SecureField(self.descriptor.placeholder, text: self.$newToken)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.footnote)
+            } else {
+                TextField(self.descriptor.placeholder, text: self.$newToken)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.footnote)
+            }
+            Button("Add") {
+                let label = self.newLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+                let token = self.newToken.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !label.isEmpty, !token.isEmpty else { return }
+                self.descriptor.addAccount(label, token)
+                self.newLabel = ""
+                self.newToken = ""
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(self.newLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                self.newToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
     }
 }
