@@ -464,9 +464,6 @@ extension StatusItemController {
             UsageMenuCardView(model: model, width: context.menuWidth),
             id: "menuCard",
             width: context.menuWidth))
-        if context.currentProvider == .codex, model.creditsText != nil {
-            menu.addItem(self.makeBuyCreditsItem())
-        }
         menu.addItem(.separator())
         return false
     }
@@ -623,6 +620,9 @@ extension StatusItemController {
             onSelect: { [weak self, weak menu] index in
                 guard let self, let menu else { return }
                 self.settings.setActiveTokenAccountIndex(index, for: display.provider)
+                // Immediate rebuild so the tab highlight updates without waiting for network.
+                self.populateMenu(menu, provider: display.provider)
+                self.markMenuFresh(menu)
                 Task { @MainActor in
                     await ProviderInteractionContext.$current.withValue(.userInitiated) {
                         // Use refreshProvider (not refresh) so it always runs even if a global
@@ -630,9 +630,11 @@ extension StatusItemController {
                         await self.store.refreshProvider(display.provider, allowDisabled: true)
                     }
                     self.applyIcon(phase: nil)
+                    // Re-populate with the freshly fetched snapshot for the newly selected account.
+                    // invalidateMenus() skips open menus, so we must explicitly update here.
+                    self.populateMenu(menu, provider: display.provider)
+                    self.markMenuFresh(menu)
                 }
-                self.populateMenu(menu, provider: display.provider)
-                self.markMenuFresh(menu)
             })
         let item = NSMenuItem()
         item.view = view
@@ -873,7 +875,7 @@ extension StatusItemController {
         webItems: OpenAIWebMenuItems)
     {
         let hasUsageBlock = !model.metrics.isEmpty || model.placeholder != nil
-        let hasCredits = model.creditsText != nil
+        let hasCredits = model.creditsText != nil && provider != .codex
         let hasExtraUsage = model.providerCost != nil
         let hasCost = model.tokenUsage != nil
         let bottomPadding = CGFloat(hasCredits ? 4 : 6)
