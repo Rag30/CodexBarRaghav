@@ -39,6 +39,7 @@ struct MenuDescriptor {
         case dashboard
         case statusPage
         case switchAccount(UsageProvider)
+        case addTokenAccount(UsageProvider)
         case openTerminal(command: String)
         case loginToProvider(url: String)
         case settings
@@ -463,6 +464,7 @@ extension MenuDescriptor.MenuAction {
         case .dashboard: MenuDescriptor.MenuActionSystemImage.dashboard.rawValue
         case .statusPage: MenuDescriptor.MenuActionSystemImage.statusPage.rawValue
         case .switchAccount: MenuDescriptor.MenuActionSystemImage.switchAccount.rawValue
+        case .addTokenAccount: MenuDescriptor.MenuActionSystemImage.switchAccount.rawValue
         case .openTerminal: MenuDescriptor.MenuActionSystemImage.openTerminal.rawValue
         case .loginToProvider: MenuDescriptor.MenuActionSystemImage.loginToProvider.rawValue
         case .copyError: MenuDescriptor.MenuActionSystemImage.copyError.rawValue
