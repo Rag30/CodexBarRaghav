@@ -92,6 +92,7 @@ extension UsageStore {
             }
             if provider == .codex {
                 self.recordCodexHistoricalSampleIfNeeded(snapshot: scoped)
+                Task { await self.refreshAllAccountCredits(for: .codex) }
             }
         case let .failure(error):
             await MainActor.run {

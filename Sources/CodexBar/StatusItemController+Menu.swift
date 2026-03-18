@@ -218,7 +218,6 @@ extension StatusItemController {
             self.lastMergedSwitcherSelection = switcherSelection
             self.lastSwitcherIncludesOverview = includesOverview
         }
-        self.addTokenAccountSwitcherIfNeeded(to: menu, display: tokenAccountDisplay)
         let menuContext = MenuCardContext(
             currentProvider: currentProvider,
             selectedProvider: selectedProvider,
@@ -226,6 +225,7 @@ extension StatusItemController {
             tokenAccountDisplay: tokenAccountDisplay,
             openAIContext: openAIContext)
         if isOverviewSelected {
+            self.addTokenAccountSwitcherIfNeeded(to: menu, display: tokenAccountDisplay)
             if self.addOverviewRows(
                 to: menu,
                 enabledProviders: enabledProviders,
@@ -237,6 +237,12 @@ extension StatusItemController {
                 menu.addItem(.separator())
             }
         } else {
+            if currentProvider == .codex {
+                self.addCostsCardIfNeeded(to: menu, width: menuWidth)
+                self.addTokenAccountSwitcherIfNeeded(to: menu, display: tokenAccountDisplay)
+            } else {
+                self.addTokenAccountSwitcherIfNeeded(to: menu, display: tokenAccountDisplay)
+            }
             let addedOpenAIWebItems = self.addMenuCards(to: menu, context: menuContext)
             self.addOpenAIWebItemsIfNeeded(
                 to: menu,
@@ -463,6 +469,19 @@ extension StatusItemController {
         }
         menu.addItem(.separator())
         return false
+    }
+
+    private func addCostsCardIfNeeded(to menu: NSMenu, width: CGFloat) {
+        let entries = self.store.allAccountCredits[.codex] ?? []
+        let isLoading = self.store.accountCostRefreshInFlight.contains(.codex)
+        // Only show the card if we have at least one account with data (or it's loading).
+        guard !entries.isEmpty || isLoading else { return }
+        let card = AccountCostsMenuCardView(
+            entries: entries,
+            isLoading: isLoading,
+            width: width)
+        menu.addItem(self.makeMenuCardItem(card, id: "costsSummaryCard", width: width))
+        menu.addItem(.separator())
     }
 
     private func addOpenAIWebItemsIfNeeded(

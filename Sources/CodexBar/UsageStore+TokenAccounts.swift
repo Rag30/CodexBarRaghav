@@ -58,6 +58,9 @@ extension UsageStore {
                 account: effectiveSelected,
                 fallbackSnapshot: selectedSnapshot)
         }
+        if provider == .codex {
+            Task { await self.refreshAllAccountCredits(for: .codex) }
+        }
     }
 
     func limitedTokenAccounts(
