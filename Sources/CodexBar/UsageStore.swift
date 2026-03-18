@@ -101,6 +101,9 @@ final class UsageStore {
     var lastFetchAttempts: [UsageProvider: [ProviderFetchAttempt]] = [:]
     var accountSnapshots: [UsageProvider: [TokenAccountUsageSnapshot]] = [:]
     var tokenSnapshots: [UsageProvider: CostUsageTokenSnapshot] = [:]
+    /// Per-account credits balance fetched via OAuth, keyed by provider.
+    var allAccountCredits: [UsageProvider: [AccountCostEntry]] = [:]
+    @ObservationIgnored var accountCostRefreshInFlight: Set<UsageProvider> = []
     var tokenErrors: [UsageProvider: String] = [:]
     var tokenRefreshInFlight: Set<UsageProvider> = []
     var credits: CreditsSnapshot?
