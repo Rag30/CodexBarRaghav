@@ -192,6 +192,13 @@ struct CodexProviderImplementation: ProviderImplementation {
     }
 
     @MainActor
+    func loginMenuAction(context _: ProviderMenuLoginContext)
+        -> (label: String, action: MenuDescriptor.MenuAction)?
+    {
+        ("Add Account...", .addTokenAccount(.codex))
+    }
+
+    @MainActor
     func runLoginFlow(context: ProviderLoginContext) async -> Bool {
         await context.controller.runCodexLoginFlow()
         return true
@@ -199,20 +206,18 @@ struct CodexProviderImplementation: ProviderImplementation {
 
     @MainActor
     func tokenAccountDefaultLabel(settings: SettingsStore?) -> String? {
-        // Prefer any user-set custom nickname stored in settings.
         if let custom = settings?.providerConfig(for: .codex)?.defaultAccountLabel,
            !custom.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         {
             return custom
         }
-        // Fall back to email extracted from the default ~/.codex/auth.json JWT.
         guard let credentials = try? CodexOAuthCredentialsStore.load(),
               let idToken = credentials.idToken,
               let payload = UsageFetcher.parseJWT(idToken)
-        else { return "Default account" }
+        else { return nil }
         let profileDict = payload["https://api.openai.com/profile"] as? [String: Any]
         let email = (payload["email"] as? String) ?? (profileDict?["email"] as? String)
-        return email?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Default account"
+        return email?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     @MainActor
