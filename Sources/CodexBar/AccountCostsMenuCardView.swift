@@ -9,23 +9,28 @@ struct AccountCostsMenuCardView: View {
 
     @Environment(\.menuItemHighlighted) private var isHighlighted
 
-    static let colWidth: CGFloat = 68
+    static let nameWidth: CGFloat = 70
+    static let badgeWidth: CGFloat = 42
+    static let colWidth: CGFloat = 72
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Accounts")
-                    .font(.headline)
-                    .foregroundStyle(MenuHighlightStyle.primary(self.isHighlighted))
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                // Mirror the row layout: icon(small) + name + badge, then columns
                 Spacer()
+                    .frame(width: 14) // icon space
+                Spacer()
+                    .frame(width: Self.nameWidth)
+                Spacer()
+                    .frame(width: Self.badgeWidth)
                 Text("Session")
                     .font(.caption2)
                     .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
-                    .frame(width: Self.colWidth, alignment: .trailing)
+                    .frame(width: Self.colWidth, alignment: .leading)
                 Text("Weekly")
                     .font(.caption2)
                     .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
-                    .frame(width: Self.colWidth, alignment: .trailing)
+                    .frame(width: Self.colWidth, alignment: .leading)
             }
             .padding(.horizontal, 16)
             .padding(.top, 10)
@@ -71,9 +76,11 @@ private struct AccountCostRow: View {
 
     private static let colWidth: CGFloat = AccountCostsMenuCardView.colWidth
 
+    private static let nameWidth: CGFloat = AccountCostsMenuCardView.nameWidth
+    private static let badgeWidth: CGFloat = AccountCostsMenuCardView.badgeWidth
+
     var body: some View {
-        HStack(alignment: .center, spacing: 6) {
-            // Left: icon + name + plan badge
+        HStack(alignment: .center, spacing: 4) {
             Image(systemName: self.entry.isDefault ? "person.circle.fill" : "person.circle")
                 .imageScale(.small)
                 .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
@@ -82,17 +89,24 @@ private struct AccountCostRow: View {
                 .font(.footnote)
                 .foregroundStyle(MenuHighlightStyle.primary(self.isHighlighted))
                 .lineLimit(1)
-                .truncationMode(.middle)
+                .truncationMode(.tail)
+                .frame(width: Self.nameWidth, alignment: .leading)
 
             if self.entry.error == nil {
                 if self.entry.isUnlimited {
                     self.planBadge("Unlimited")
+                        .frame(width: Self.badgeWidth, alignment: .leading)
                 } else if let plan = self.entry.planType {
                     self.planBadge(plan)
+                        .frame(width: Self.badgeWidth, alignment: .leading)
+                } else {
+                    Spacer()
+                        .frame(width: Self.badgeWidth)
                 }
+            } else {
+                Spacer()
+                    .frame(width: Self.badgeWidth)
             }
-
-            Spacer(minLength: 4)
 
             // Right columns: Session | Weekly
             if let error = self.entry.error {
@@ -117,28 +131,31 @@ private struct AccountCostRow: View {
         }
     }
 
+    private static let pctWidth: CGFloat = 30
+
     @ViewBuilder
     private func percentCell(usedPercent: Double?, resetDescription: String?) -> some View {
         if let used = usedPercent {
             let remaining = max(0, 100 - used)
             let isLow = remaining < 20
             let pctColor: Color = isLow ? .orange : MenuHighlightStyle.secondary(self.isHighlighted)
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 1) {
                 Text(String(format: "%.0f%%", remaining))
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(pctColor)
+                    .frame(width: Self.pctWidth, alignment: .leading)
                 if let reset = resetDescription {
                     Text(reset)
                         .font(.system(size: 9).monospacedDigit())
                         .foregroundStyle(pctColor.opacity(0.65))
                 }
             }
-            .frame(width: Self.colWidth, alignment: .trailing)
+            .frame(width: Self.colWidth, alignment: .leading)
         } else {
             Text("—")
                 .font(.caption2)
                 .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted).opacity(0.5))
-                .frame(width: Self.colWidth, alignment: .trailing)
+                .frame(width: Self.colWidth, alignment: .leading)
         }
     }
 
