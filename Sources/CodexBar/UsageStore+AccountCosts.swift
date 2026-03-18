@@ -11,10 +11,14 @@ struct AccountCostEntry: Identifiable, Sendable {
     let isUnlimited: Bool
     /// Plan name, e.g. "Pro", "Team", "Free".
     let planType: String?
-    /// Primary rate-window usage percent (0-100), shown when no credits balance.
+    /// Primary (session) rate-window usage percent (0-100).
     let primaryUsedPercent: Double?
-    /// Human-readable reset time for the primary window.
-    let resetDescription: String?
+    /// Secondary (weekly) rate-window usage percent (0-100). Preferred for display.
+    let secondaryUsedPercent: Double?
+    /// Compact countdown reset time for the session window, e.g. "in 3h 31m".
+    let primaryResetDescription: String?
+    /// Compact countdown reset time for the weekly window, e.g. "in 1d 2h".
+    let secondaryResetDescription: String?
     let error: String?
     let updatedAt: Date
 }
@@ -104,12 +108,20 @@ extension UsageStore {
             // Plan type display name.
             let planType = response.planType.map { Self.planDisplayName($0) }
 
-            // Primary rate-window usage.
+            // Rate-window usage — prefer weekly (secondary) for display, keep primary as fallback.
             let primaryWindow = response.rateLimit?.primaryWindow
-            let usedPercent = primaryWindow.map { Double($0.usedPercent) }
-            let resetDesc: String? = primaryWindow.map {
+            let secondaryWindow = response.rateLimit?.secondaryWindow
+            let primaryUsedPercent = primaryWindow.map { Double($0.usedPercent) }
+            let secondaryUsedPercent = secondaryWindow.map { Double($0.usedPercent) }
+            let primaryResetDesc: String? = primaryWindow.map {
                 let date = Date(timeIntervalSince1970: TimeInterval($0.resetAt))
-                return UsageFormatter.resetDescription(from: date)
+                let s = UsageFormatter.resetCountdownDescription(from: date)
+                return s.hasPrefix("in ") ? String(s.dropFirst(3)) : s
+            }
+            let secondaryResetDesc: String? = secondaryWindow.map {
+                let date = Date(timeIntervalSince1970: TimeInterval($0.resetAt))
+                let s = UsageFormatter.resetCountdownDescription(from: date)
+                return s.hasPrefix("in ") ? String(s.dropFirst(3)) : s
             }
 
             return AccountCostEntry(
@@ -119,8 +131,10 @@ extension UsageStore {
                 creditsRemaining: balance,
                 isUnlimited: unlimited,
                 planType: planType,
-                primaryUsedPercent: usedPercent,
-                resetDescription: resetDesc,
+                primaryUsedPercent: primaryUsedPercent,
+                secondaryUsedPercent: secondaryUsedPercent,
+                primaryResetDescription: primaryResetDesc,
+                secondaryResetDescription: secondaryResetDesc,
                 error: nil,
                 updatedAt: Date())
         } catch {
@@ -132,7 +146,9 @@ extension UsageStore {
                 isUnlimited: false,
                 planType: nil,
                 primaryUsedPercent: nil,
-                resetDescription: nil,
+                secondaryUsedPercent: nil,
+                primaryResetDescription: nil,
+                secondaryResetDescription: nil,
                 error: error.localizedDescription,
                 updatedAt: Date())
         }

@@ -9,6 +9,8 @@ struct AccountCostsMenuCardView: View {
 
     @Environment(\.menuItemHighlighted) private var isHighlighted
 
+    static let colWidth: CGFloat = 68
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
@@ -16,6 +18,14 @@ struct AccountCostsMenuCardView: View {
                     .font(.headline)
                     .foregroundStyle(MenuHighlightStyle.primary(self.isHighlighted))
                 Spacer()
+                Text("Session")
+                    .font(.caption2)
+                    .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
+                    .frame(width: Self.colWidth, alignment: .trailing)
+                Text("Weekly")
+                    .font(.caption2)
+                    .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
+                    .frame(width: Self.colWidth, alignment: .trailing)
             }
             .padding(.horizontal, 16)
             .padding(.top, 10)
@@ -59,8 +69,11 @@ private struct AccountCostRow: View {
     let entry: AccountCostEntry
     let isHighlighted: Bool
 
+    private static let colWidth: CGFloat = AccountCostsMenuCardView.colWidth
+
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .center, spacing: 6) {
+            // Left: icon + name + plan badge
             Image(systemName: self.entry.isDefault ? "person.circle.fill" : "person.circle")
                 .imageScale(.small)
                 .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
@@ -71,35 +84,61 @@ private struct AccountCostRow: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
 
+            if self.entry.error == nil {
+                if self.entry.isUnlimited {
+                    self.planBadge("Unlimited")
+                } else if let plan = self.entry.planType {
+                    self.planBadge(plan)
+                }
+            }
+
             Spacer(minLength: 4)
 
-            self.trailingContent
+            // Right columns: Session | Weekly
+            if let error = self.entry.error {
+                Text(self.shortError(error))
+                    .font(.caption2)
+                    .foregroundStyle(MenuHighlightStyle.error(self.isHighlighted))
+                    .frame(width: Self.colWidth * 2 + 8, alignment: .trailing)
+            } else if let balance = self.entry.creditsRemaining {
+                // Prepaid credits: span both columns
+                Text(UsageFormatter.usdString(balance) + " left")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(balance < 5 ? Color.orange : MenuHighlightStyle.secondary(self.isHighlighted))
+                    .frame(width: Self.colWidth * 2 + 8, alignment: .trailing)
+            } else {
+                self.percentCell(
+                    usedPercent: self.entry.primaryUsedPercent,
+                    resetDescription: self.entry.primaryResetDescription)
+                self.percentCell(
+                    usedPercent: self.entry.secondaryUsedPercent,
+                    resetDescription: self.entry.secondaryResetDescription)
+            }
         }
     }
 
     @ViewBuilder
-    private var trailingContent: some View {
-        if let error = self.entry.error {
-            Text(self.shortError(error))
-                .font(.footnote)
-                .foregroundStyle(MenuHighlightStyle.error(self.isHighlighted))
-                .lineLimit(1)
-        } else if self.entry.isUnlimited {
-            self.planBadge("Unlimited")
-        } else if let balance = self.entry.creditsRemaining {
-            // Prepaid credits — the one case where a dollar amount is meaningful.
-            HStack(spacing: 4) {
-                if let plan = self.entry.planType { self.planBadge(plan) }
-                Text(UsageFormatter.usdString(balance) + " left")
-                    .font(.footnote.monospacedDigit())
-                    .foregroundStyle(balance < 5 ? Color.orange : MenuHighlightStyle.primary(self.isHighlighted))
+    private func percentCell(usedPercent: Double?, resetDescription: String?) -> some View {
+        if let used = usedPercent {
+            let remaining = max(0, 100 - used)
+            let isLow = remaining < 20
+            let pctColor: Color = isLow ? .orange : MenuHighlightStyle.secondary(self.isHighlighted)
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(String(format: "%.0f%%", remaining))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(pctColor)
+                if let reset = resetDescription {
+                    Text(reset)
+                        .font(.system(size: 9).monospacedDigit())
+                        .foregroundStyle(pctColor.opacity(0.65))
+                }
             }
-        } else if let plan = self.entry.planType {
-            self.planBadge(plan)
+            .frame(width: Self.colWidth, alignment: .trailing)
         } else {
             Text("—")
-                .font(.footnote)
-                .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
+                .font(.caption2)
+                .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted).opacity(0.5))
+                .frame(width: Self.colWidth, alignment: .trailing)
         }
     }
 
