@@ -110,10 +110,19 @@ private struct AccountCostRow: View {
 
             // Right columns: Session | Weekly
             if let error = self.entry.error {
-                Text(self.shortError(error))
-                    .font(.caption2)
-                    .foregroundStyle(MenuHighlightStyle.error(self.isHighlighted))
-                    .frame(width: Self.colWidth * 2 + 8, alignment: .trailing)
+                if self.entry.isDefault {
+                    Text(self.shortError(error))
+                        .font(.caption2)
+                        .foregroundStyle(MenuHighlightStyle.error(self.isHighlighted))
+                        .frame(width: Self.colWidth * 2 + 8, alignment: .trailing)
+                } else {
+                    Text("Credit information is available only for the primary account.")
+                        .font(.caption2)
+                        .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: Self.colWidth * 2 + 24, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             } else if let balance = self.entry.creditsRemaining {
                 // Prepaid credits: span both columns
                 Text(UsageFormatter.usdString(balance) + " left")

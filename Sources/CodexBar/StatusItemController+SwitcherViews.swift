@@ -793,6 +793,17 @@ final class ProviderSwitcherView: NSView {
 }
 
 final class TokenAccountSwitcherView: NSView {
+    /// Height for the switcher given account count (matches internal layout).
+    static func preferredHeight(accounts: [ProviderTokenAccount], defaultAccountLabel: String?) -> CGFloat {
+        let totalCount = accounts.count + (defaultAccountLabel != nil ? 1 : 0)
+        guard totalCount > 0 else { return 0 }
+        let useTwoRows = totalCount > 3
+        let rows = useTwoRows ? 2 : 1
+        let rowSpacing: CGFloat = 4
+        let rowHeight: CGFloat = 26
+        return rowHeight * CGFloat(rows) + (useTwoRows ? rowSpacing : 0)
+    }
+
     private let accounts: [ProviderTokenAccount]
     private let defaultAccountLabel: String?
     private let onSelect: (Int) -> Void
@@ -802,6 +813,8 @@ final class TokenAccountSwitcherView: NSView {
     private var buttons: [NSButton] = []
     private let rowSpacing: CGFloat = 4
     private let rowHeight: CGFloat = 26
+    /// Horizontal inset of the button stack inside this view (menu uses a little breathing room; preferences flush).
+    private let contentMargin: CGFloat
     private let selectedBackground = NSColor.controlAccentColor.cgColor
     private let unselectedBackground = NSColor.clear.cgColor
     private let selectedTextColor = NSColor.white
@@ -812,10 +825,12 @@ final class TokenAccountSwitcherView: NSView {
         defaultAccountLabel: String? = nil,
         selectedIndex: Int,
         width: CGFloat,
+        contentMargin: CGFloat = 6,
         onSelect: @escaping (Int) -> Void)
     {
         self.accounts = accounts
         self.defaultAccountLabel = defaultAccountLabel
+        self.contentMargin = contentMargin
         self.onSelect = onSelect
         // selectedIndex == -1 means default account is active
         let totalCount = accounts.count + (defaultAccountLabel != nil ? 1 : 0)
@@ -823,10 +838,9 @@ final class TokenAccountSwitcherView: NSView {
             ? -1
             : min(max(selectedIndex, 0), max(0, accounts.count - 1))
         self.selectedIndex = clampedIndex
-        let useTwoRows = totalCount > 3
-        let rows = useTwoRows ? 2 : 1
-        let height = self.rowHeight * CGFloat(rows) + (useTwoRows ? self.rowSpacing : 0)
+        let height = Self.preferredHeight(accounts: accounts, defaultAccountLabel: defaultAccountLabel)
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        let useTwoRows = totalCount > 3
         self.wantsLayer = true
         self.buildButtons(useTwoRows: useTwoRows)
         self.updateButtonStyles()
@@ -855,7 +869,8 @@ final class TokenAccountSwitcherView: NSView {
 
         let stack = NSStackView()
         stack.orientation = .vertical
-        stack.alignment = .centerX
+        // Leading keeps account tabs aligned with section titles; centerX left empty space on the left.
+        stack.alignment = .leading
         stack.spacing = self.rowSpacing
         stack.translatesAutoresizingMaskIntoConstraints = false
 
@@ -888,12 +903,13 @@ final class TokenAccountSwitcherView: NSView {
             }
 
             stack.addArrangedSubview(row)
+            row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
 
         self.addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: self.leadingAnchor, constant: 6),
-            stack.trailingAnchor.constraint(equalTo: self.trailingAnchor, constant: -6),
+            stack.leadingAnchor.constraint(equalTo: self.leadingAnchor, constant: self.contentMargin),
+            stack.trailingAnchor.constraint(equalTo: self.trailingAnchor, constant: -self.contentMargin),
             stack.topAnchor.constraint(equalTo: self.topAnchor),
             stack.bottomAnchor.constraint(equalTo: self.bottomAnchor),
             stack.heightAnchor.constraint(equalToConstant: self.rowHeight * CGFloat(chunks.count) +
@@ -902,7 +918,8 @@ final class TokenAccountSwitcherView: NSView {
     }
 
     private func updateButtonStyles() {
-        for (tag, button) in self.buttons.enumerated() {
+        for button in self.buttons {
+            let tag = button.tag
             let logicalIndex = self.buttonTagToIndex[tag] ?? tag
             let selected = logicalIndex == self.selectedIndex
             button.state = selected ? .on : .off

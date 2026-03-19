@@ -32,6 +32,7 @@ struct ProvidersPane: View {
                 ProviderDetailView(
                     provider: provider,
                     store: self.store,
+                    settings: self.settings,
                     isEnabled: self.binding(for: provider),
                     subtitle: self.providerSubtitle(provider),
                     model: self.menuCardModel(for: provider),
@@ -195,8 +196,8 @@ struct ProvidersPane: View {
             },
             accounts: { self.settings.tokenAccounts(for: provider) },
             activeIndex: {
-                let data = self.settings.tokenAccountsData(for: provider)
-                return data?.clampedActiveIndex() ?? 0
+                guard let data = self.settings.tokenAccountsData(for: provider) else { return -1 }
+                return data.activeIndex
             },
             setActiveIndex: { index in
                 self.settings.setActiveTokenAccountIndex(index, for: provider)
@@ -378,6 +379,7 @@ struct ProvidersPane: View {
             resetTimeDisplayStyle: self.settings.resetTimeDisplayStyle,
             tokenCostUsageEnabled: self.settings.isCostUsageEffectivelyEnabled(for: provider),
             showOptionalCreditsAndExtraUsage: self.settings.showOptionalCreditsAndExtraUsage,
+            codexMenuCreditsPrimaryAccountNotice: self.settings.codexMenuCreditsPrimaryAccountOnlyMessage(),
             hidePersonalInfo: self.settings.hidePersonalInfo,
             weeklyPace: weeklyPace,
             now: now)

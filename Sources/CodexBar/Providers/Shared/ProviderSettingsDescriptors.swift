@@ -117,6 +117,12 @@ struct ProviderSettingsTokenAccountsDescriptor: Identifiable {
     ) async -> Bool)?
 }
 
+/// Which detail section a provider settings picker appears in.
+enum ProviderSettingsPickerSection: Sendable {
+    case settings
+    case options
+}
+
 /// Shared picker descriptor rendered in the Providers settings pane.
 @MainActor
 struct ProviderSettingsPickerDescriptor: Identifiable {
@@ -130,6 +136,7 @@ struct ProviderSettingsPickerDescriptor: Identifiable {
     let isEnabled: (() -> Bool)?
     let onChange: ((_ selection: String) async -> Void)?
     let trailingText: (() -> String?)?
+    let section: ProviderSettingsPickerSection
 
     init(
         id: String,
@@ -141,7 +148,8 @@ struct ProviderSettingsPickerDescriptor: Identifiable {
         isVisible: (() -> Bool)?,
         isEnabled: (() -> Bool)? = nil,
         onChange: ((_ selection: String) async -> Void)?,
-        trailingText: (() -> String?)? = nil)
+        trailingText: (() -> String?)? = nil,
+        section: ProviderSettingsPickerSection = .settings)
     {
         self.id = id
         self.title = title
@@ -153,6 +161,7 @@ struct ProviderSettingsPickerDescriptor: Identifiable {
         self.isEnabled = isEnabled
         self.onChange = onChange
         self.trailingText = trailingText
+        self.section = section
     }
 }
 

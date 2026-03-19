@@ -399,10 +399,23 @@ struct MenuDescriptor {
 
     private static func hasAccount(for provider: UsageProvider?, store: UsageStore, account: AccountInfo) -> Bool {
         let target = provider ?? store.enabledProviders().first ?? .codex
-        if let email = store.snapshot(for: target)?.accountEmail(for: target),
-           !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        {
-            return true
+        if let snap = store.snapshot(for: target) {
+            let email = snap.accountEmail(for: target)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let email, !email.isEmpty {
+                return true
+            }
+            let login = snap.loginMethod(for: target)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let login, !login.isEmpty {
+                return true
+            }
+            let org = snap.accountOrganization(for: target)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let org, !org.isEmpty {
+                return true
+            }
+            // Usage or cost without profile email still means a connected session (e.g. Claude OAuth without email).
+            if snap.primary != nil || snap.secondary != nil || snap.tertiary != nil || snap.providerCost != nil {
+                return true
+            }
         }
         let metadata = store.metadata(for: target)
         if metadata.usesAccountFallback,

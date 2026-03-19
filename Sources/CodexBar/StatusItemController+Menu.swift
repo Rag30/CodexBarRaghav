@@ -442,6 +442,9 @@ extension StatusItemController {
                     menu.addItem(.separator())
                 }
             }
+            if context.currentProvider == .codex, self.settings.codexBuyCreditsMenuEnabled {
+                menu.addItem(self.makeBuyCreditsItem())
+            }
             return false
         }
 
@@ -464,6 +467,9 @@ extension StatusItemController {
             UsageMenuCardView(model: model, width: context.menuWidth),
             id: "menuCard",
             width: context.menuWidth))
+        if context.currentProvider == .codex, self.settings.codexBuyCreditsMenuEnabled {
+            menu.addItem(self.makeBuyCreditsItem())
+        }
         menu.addItem(.separator())
         return false
     }
@@ -499,6 +505,9 @@ extension StatusItemController {
             if context.hasCostHistory {
                 _ = self.addCostHistorySubmenu(to: menu, provider: currentProvider)
             }
+        } else if currentProvider == .codex, context.hasCreditsHistory {
+            // Codex hides the credits card row; still expose credits history as a top-level submenu.
+            _ = self.addCreditsHistorySubmenu(to: menu)
         }
         menu.addItem(.separator())
     }
@@ -926,9 +935,6 @@ extension StatusItemController {
                 id: "menuCardCredits",
                 width: width,
                 submenu: creditsSubmenu))
-            if provider == .codex {
-                menu.addItem(self.makeBuyCreditsItem())
-            }
         }
         if hasExtraUsage {
             if hasCredits {
@@ -959,6 +965,13 @@ extension StatusItemController {
                 id: "menuCardCost",
                 width: width,
                 submenu: costSubmenu))
+        }
+
+        if provider == .codex, self.settings.codexBuyCreditsMenuEnabled {
+            if hasUsageBlock || hasCredits || hasExtraUsage || hasCost {
+                menu.addItem(.separator())
+            }
+            menu.addItem(self.makeBuyCreditsItem())
         }
     }
 
@@ -1450,6 +1463,7 @@ extension StatusItemController {
             resetTimeDisplayStyle: self.settings.resetTimeDisplayStyle,
             tokenCostUsageEnabled: self.settings.isCostUsageEffectivelyEnabled(for: target),
             showOptionalCreditsAndExtraUsage: self.settings.showOptionalCreditsAndExtraUsage,
+            codexMenuCreditsPrimaryAccountNotice: self.settings.codexMenuCreditsPrimaryAccountOnlyMessage(),
             sourceLabel: sourceLabel,
             kiloAutoMode: kiloAutoMode,
             hidePersonalInfo: self.settings.hidePersonalInfo,

@@ -85,6 +85,8 @@ public struct ProviderConfig: Codable, Sendable, Identifiable {
     public var tokenAccounts: ProviderTokenAccountData?
     /// Custom display name for the default (non-token-account) account of this provider.
     public var defaultAccountLabel: String?
+    /// When `false`, hides the menu-bar "Buy Credits…" action for Codex. `nil` means enabled (default).
+    public var buyCreditsMenuEnabled: Bool?
 
     public init(
         id: UsageProvider,
@@ -97,7 +99,8 @@ public struct ProviderConfig: Codable, Sendable, Identifiable {
         region: String? = nil,
         workspaceID: String? = nil,
         tokenAccounts: ProviderTokenAccountData? = nil,
-        defaultAccountLabel: String? = nil)
+        defaultAccountLabel: String? = nil,
+        buyCreditsMenuEnabled: Bool? = nil)
     {
         self.id = id
         self.enabled = enabled
@@ -110,6 +113,7 @@ public struct ProviderConfig: Codable, Sendable, Identifiable {
         self.workspaceID = workspaceID
         self.tokenAccounts = tokenAccounts
         self.defaultAccountLabel = defaultAccountLabel
+        self.buyCreditsMenuEnabled = buyCreditsMenuEnabled
     }
 
     public var sanitizedAPIKey: String? {

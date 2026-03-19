@@ -54,6 +54,12 @@ public enum TokenAccountSupportCatalog {
         case .codexHome:
             let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return nil }
+            let apiPrefix = "apikey:"
+            if trimmed.lowercased().hasPrefix(apiPrefix) {
+                let key = trimmed.dropFirst(apiPrefix.count).trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !key.isEmpty else { return nil }
+                return ["OPENAI_API_KEY": key]
+            }
             let expanded = (trimmed as NSString).expandingTildeInPath
             return ["CODEX_HOME": expanded]
         }
