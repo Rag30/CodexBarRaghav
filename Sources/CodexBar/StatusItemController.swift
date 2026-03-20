@@ -318,11 +318,15 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     }
 
     private func handleSettingsChange(reason: String) {
-        let configChanged = self.settings.configRevision != self.lastConfigRevision
         let orderChanged = self.settings.providerOrder != self.lastProviderOrder
         let shouldRefreshOpenMenus = self.shouldRefreshOpenMenusForProviderSwitcher()
         self.invalidateMenus()
-        if orderChanged || configChanged {
+        // Rebuilding status items calls `removeStatusItem` for every provider slot, which reflows the
+        // system menu bar and can make *other* apps' menu extras disappear briefly. Token-account
+        // switches (and most provider config edits) bump `configRevision` without changing order;
+        // `updateVisibility` + `lazyStatusItem` already keep items correct—only reorder needs a rebuild
+        // so multi-icon layout matches `orderedProviders()`.
+        if orderChanged {
             self.rebuildProviderStatusItems()
         }
         self.updateVisibility()
