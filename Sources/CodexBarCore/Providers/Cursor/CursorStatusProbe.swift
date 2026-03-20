@@ -292,8 +292,10 @@ public struct CursorStatusSnapshot: Sendable {
         let resolvedOnDemandUsed = self.onDemandUsedUSD
         let resolvedOnDemandLimit = self.onDemandLimitUSD
 
-        // Provider cost snapshot for on-demand usage
-        let providerCost: ProviderCostSnapshot? = if resolvedOnDemandUsed > 0 {
+        // Provider cost snapshot for on-demand usage (include budget before first spend)
+        let providerCost: ProviderCostSnapshot? = if resolvedOnDemandUsed > 0
+            || (resolvedOnDemandLimit ?? 0) > 0
+        {
             ProviderCostSnapshot(
                 used: resolvedOnDemandUsed,
                 limit: resolvedOnDemandLimit ?? 0,

@@ -210,6 +210,31 @@ struct CursorStatusProbeTests {
     }
 
     @Test
+    func `provider cost includes on demand budget before first spend`() {
+        let snapshot = CursorStatusSnapshot(
+            planPercentUsed: 10.0,
+            autoPercentUsed: 5.0,
+            apiPercentUsed: nil,
+            planUsedUSD: 5.0,
+            planLimitUSD: 50.0,
+            onDemandUsedUSD: 0,
+            onDemandLimitUSD: 75.0,
+            teamOnDemandUsedUSD: nil,
+            teamOnDemandLimitUSD: nil,
+            billingCycleEnd: nil,
+            membershipType: "pro",
+            accountEmail: nil,
+            accountName: nil,
+            rawJSON: nil)
+
+        let usageSnapshot = snapshot.toUsageSnapshot()
+
+        #expect(usageSnapshot.providerCost != nil)
+        #expect(usageSnapshot.providerCost?.used == 0.0)
+        #expect(usageSnapshot.providerCost?.limit == 75.0)
+    }
+
+    @Test
     func `uses individual on demand when no team usage`() {
         let snapshot = CursorStatusSnapshot(
             planPercentUsed: 10.0,
