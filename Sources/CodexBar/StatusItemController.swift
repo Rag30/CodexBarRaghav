@@ -125,30 +125,47 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     }
 
     func menuBarMetricWindow(for provider: UsageProvider, snapshot: UsageSnapshot?) -> RateWindow? {
-        switch self.settings.menuBarMetricPreference(for: provider) {
-        case .primary:
-            return snapshot?.primary ?? snapshot?.secondary
-        case .secondary:
-            return snapshot?.secondary ?? snapshot?.primary
-        case .average:
-            guard let primary = snapshot?.primary, let secondary = snapshot?.secondary else {
-                return snapshot?.primary ?? snapshot?.secondary
-            }
-            let usedPercent = (primary.usedPercent + secondary.usedPercent) / 2
-            return RateWindow(usedPercent: usedPercent, windowMinutes: nil, resetsAt: nil, resetDescription: nil)
-        case .automatic:
-            if provider == .factory || provider == .kimi {
-                return snapshot?.secondary ?? snapshot?.primary
-            }
-            if provider == .copilot,
-               let primary = snapshot?.primary,
-               let secondary = snapshot?.secondary
-            {
-                // Copilot can expose chat + completions quotas; show the more constrained one by default.
-                return primary.usedPercent >= secondary.usedPercent ? primary : secondary
-            }
-            return snapshot?.primary ?? snapshot?.secondary
+        MenuBarMetricWindowResolver.rateWindow(
+            lane: self.settings.menuBarIconTopLane(for: provider),
+            provider: provider,
+            snapshot: snapshot,
+            supportsAverage: self.settings.menuBarMetricSupportsAverage(for: provider))
+    }
+
+    /// Values for the two menu bar icon bars from **Menu bar top / bottom** lane pickers.
+    func menuBarIconBarPercents(for provider: UsageProvider, snapshot: UsageSnapshot?, showUsed: Bool) -> (
+        primary: Double?,
+        weekly: Double?)
+    {
+        guard let snapshot else { return (nil, nil) }
+
+        func laneValue(_ window: RateWindow?) -> Double? {
+            guard let window else { return nil }
+            return showUsed ? window.usedPercent : window.remainingPercent
         }
+
+        let supportsAverage = self.settings.menuBarMetricSupportsAverage(for: provider)
+        let topLane = self.settings.menuBarIconTopLane(for: provider)
+        let bottomLane = self.settings.menuBarIconBottomLane(for: provider)
+
+        let topWin = MenuBarMetricWindowResolver.rateWindow(
+            lane: topLane,
+            provider: provider,
+            snapshot: snapshot,
+            supportsAverage: supportsAverage)
+        let bottomWin: RateWindow? = if bottomLane == .none {
+            nil
+        } else if bottomLane == .automatic {
+            MenuBarMetricWindowResolver.secondAutomaticWindow(provider: provider, snapshot: snapshot)
+        } else {
+            MenuBarMetricWindowResolver.rateWindow(
+                lane: bottomLane,
+                provider: provider,
+                snapshot: snapshot,
+                supportsAverage: supportsAverage)
+        }
+
+        return (laneValue(topWin), laneValue(bottomWin))
     }
 
     init(
