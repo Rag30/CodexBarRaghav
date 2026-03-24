@@ -45,6 +45,30 @@ extension SettingsStore {
         return data.accounts[index]
     }
 
+    func activeCodexAPIKey(
+        baseEnvironment: [String: String] = ProcessInfo.processInfo.environment) -> String?
+    {
+        // Respect the currently selected add-on account so that an API-key row doesn't get
+        // confused with ~/.codex credentials (and vice-versa) when codexExplicitAccountsOnly is on.
+        let selected = self.selectedTokenAccount(for: .codex)
+        let tokenOverride = selected.map { TokenAccountOverride(provider: .codex, account: $0) }
+        let env = ProviderRegistry.makeEnvironment(
+            base: baseEnvironment,
+            provider: .codex,
+            settings: self,
+            tokenOverride: tokenOverride)
+        guard let credentials = try? CodexOAuthCredentialsStore.load(env: env) else { return nil }
+        let accessToken = credentials.accessToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        let refreshToken = credentials.refreshToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !accessToken.isEmpty, refreshToken.isEmpty else { return nil }
+        return accessToken
+    }
+
+    func isActiveCodexAPIAccount(
+        baseEnvironment: [String: String] = ProcessInfo.processInfo.environment) -> Bool
+    {
+        self.activeCodexAPIKey(baseEnvironment: baseEnvironment) != nil
+    }
     func setActiveTokenAccountIndex(_ index: Int, for provider: UsageProvider) {
         guard let data = self.tokenAccountsData(for: provider), !data.accounts.isEmpty else { return }
         // index == -1 means "use default account" (no CODEX_HOME override)
@@ -125,13 +149,14 @@ extension SettingsStore {
             ? accounts[data.activeIndex]
             : nil
         accounts.move(fromOffsets: fromOffsets, toOffset: toOffset)
-        let newActiveIndex: Int
-        if let activeAccount = previousActiveAccount,
-           let newIndex = accounts.firstIndex(where: { $0.id == activeAccount.id })
+        let newActiveIndex: Int = if let activeAccount = previousActiveAccount,
+                                     let newIndex = accounts.firstIndex(where: { $0.id == activeAccount.id })
         {
-            newActiveIndex = newIndex
+            newIndex
         } else {
-            newActiveIndex = data.activeIndex
+            // Preserve the primary-account sentinel (-1) or clamp an out-of-range index so we
+            // never persist an index that points past the end of the reordered array.
+            max(-1, min(data.activeIndex, accounts.count - 1))
         }
         let updated = ProviderTokenAccountData(
             version: data.version,
@@ -220,5 +245,45 @@ extension SettingsStore {
               support.requiresManualCookieSource
         else { return }
         ProviderCatalog.implementation(for: provider)?.applyTokenAccountCookieSource(settings: self)
+    }
+    func repairCodexShellIntegrationIfNeeded() {
+        guard !Self.isRunningTests else { return }
+
+        // When multiple-accounts mode is disabled, accounts may still linger in config but must
+        // not influence the shell environment – treat the primary ~/.codex as the only account.
+        guard self.codexMultipleAccountsEnabled else {
+            CodexBarShellIntegration.setActiveCodexHome(nil)
+            return
+        }
+
+        let pathAccounts = self.tokenAccounts(for: .codex)
+            .map(\.token)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { token in
+                !token.isEmpty && !token.lowercased().hasPrefix("apikey:")
+            }
+
+        guard !pathAccounts.isEmpty else {
+            CodexBarShellIntegration.setActiveCodexHome(nil)
+            return
+        }
+
+        CodexBarShellIntegration.installZshHookIfNeeded()
+        for path in pathAccounts {
+            CodexBarShellIntegration.ensureDedicatedSessionsDirectoryIfNeeded(into: path)
+        }
+
+        let activeToken = self.selectedTokenAccount(for: .codex)?
+            .token
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let activePath: String? = if let activeToken,
+                                     !activeToken.isEmpty,
+                                     !activeToken.lowercased().hasPrefix("apikey:")
+        {
+            activeToken
+        } else {
+            nil
+        }
+        CodexBarShellIntegration.setActiveCodexHome(activePath)
     }
 }
