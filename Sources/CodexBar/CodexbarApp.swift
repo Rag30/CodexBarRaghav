@@ -266,12 +266,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        // Menu bar agent: keep activation policy explicit. SwiftUI + `WindowGroup` can leave
+        // `NSApp` in `.regular` briefly; without `.accessory`, status items may not appear as expected
+        // (especially alongside LSUIElement / no-Dock builds).
+        NSApp.setActivationPolicy(.accessory)
         self.configureAppIconForMacOSVersion()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppNotifications.shared.requestAuthorizationOnStartup()
         self.ensureStatusController()
+        NSApp.setActivationPolicy(.accessory)
         KeyboardShortcuts.onKeyUp(for: .openMenu) { [weak self] in
             Task { @MainActor [weak self] in
                 self?.statusController?.openMenuFromShortcut()

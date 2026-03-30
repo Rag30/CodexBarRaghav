@@ -23,12 +23,11 @@ extension StatusItemController {
         }
 
         let blinkingEnabled = self.isBlinkingAllowed()
-        // Use display list so merged-mode visibility stays consistent with shouldMergeIcons.
-        let displayProviders = self.store.enabledProvidersForDisplay()
-        let anyEnabled = !displayProviders.isEmpty || self.store.debugForceAnimation
+        // Merged mode must match `updateVisibility` / `anyMenuBarProviderShouldShow`, not raw display list
+        // length, or blink state can disagree with actual icon visibility.
         let anyVisible = UsageProvider.allCases.contains { self.isVisible($0) }
         let mergeIcons = self.shouldMergeIcons
-        let shouldBlink = mergeIcons ? anyEnabled : anyVisible
+        let shouldBlink = mergeIcons ? self.anyMenuBarProviderShouldShow() : anyVisible
         if blinkingEnabled, shouldBlink {
             if self.blinkTask == nil {
                 self.seedBlinkStatesIfNeeded()

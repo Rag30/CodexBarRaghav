@@ -361,19 +361,44 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         return item
     }
 
+    /// Whether any provider slot should appear in the menu bar (merged single icon or per-provider icons).
+    func anyMenuBarProviderShouldShow() -> Bool {
+        let fallback = self.fallbackProvider
+        let force = self.store.debugForceAnimation
+        return UsageProvider.allCases.contains { provider in
+            self.isEnabled(provider) || fallback == provider || force
+        }
+    }
+
+    private func refreshMenuBarButtonTooltips() {
+        if self.shouldMergeIcons {
+            guard self.statusItem.isVisible else { return }
+            self.statusItem.button?.toolTip = "CodexBar"
+            return
+        }
+        for provider in UsageProvider.allCases {
+            guard let item = self.statusItems[provider], item.isVisible, let button = item.button else { continue }
+            let name = ProviderDescriptorRegistry.descriptor(for: provider).metadata.displayName
+            button.toolTip = "CodexBar — \(name)"
+        }
+    }
+
     private func updateVisibility() {
-        let anyEnabled = !self.store.enabledProvidersForDisplay().isEmpty
         let force = self.store.debugForceAnimation
         let mergeIcons = self.shouldMergeIcons
+        let fallback = self.fallbackProvider
+        // Merged mode must use the same visibility rule as split mode. Relying only on
+        // `enabledProvidersForDisplay()` is wrong when that list is empty (e.g. enablement
+        // keys missing → false) while Codex fallback would still show an icon in split mode.
+        let anyProviderWouldShow = self.anyMenuBarProviderShouldShow()
         if mergeIcons {
-            self.statusItem.isVisible = anyEnabled || force
+            self.statusItem.isVisible = anyProviderWouldShow
             for item in self.statusItems.values {
                 item.isVisible = false
             }
             self.attachMenus()
         } else {
             self.statusItem.isVisible = false
-            let fallback = self.fallbackProvider
             for provider in UsageProvider.allCases {
                 let isEnabled = self.isEnabled(provider)
                 let shouldBeVisible = isEnabled || fallback == provider || force
@@ -386,6 +411,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
             }
             self.attachMenus(fallback: fallback)
         }
+        self.refreshMenuBarButtonTooltips()
         self.updateAnimationState()
         self.updateBlinkingState()
     }
