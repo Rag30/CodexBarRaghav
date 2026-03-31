@@ -156,6 +156,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         self.lastSwitcherUsageBarsShowUsed = settings.usageBarsShowUsed
         self.statusBar = statusBar
         let item = statusBar.statusItem(withLength: NSStatusItem.variableLength)
+        item.autosaveName = "CodexBarMerged"
         // Ensure the icon is rendered at 1:1 without resampling (crisper edges for template images).
         item.button?.imageScaling = .scaleNone
         self.statusItem = item
@@ -356,6 +357,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
             return existing
         }
         let item = self.statusBar.statusItem(withLength: NSStatusItem.variableLength)
+        item.autosaveName = "CodexBar-\(provider.rawValue)"
         item.button?.imageScaling = .scaleNone
         self.statusItems[provider] = item
         return item
@@ -391,6 +393,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         // `enabledProvidersForDisplay()` is wrong when that list is empty (e.g. enablement
         // keys missing → false) while Codex fallback would still show an icon in split mode.
         let anyProviderWouldShow = self.anyMenuBarProviderShouldShow()
+        
         if mergeIcons {
             self.statusItem.isVisible = anyProviderWouldShow
             for item in self.statusItems.values {

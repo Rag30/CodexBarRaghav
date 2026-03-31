@@ -147,7 +147,7 @@ final class SettingsStore {
         CodexBarLog.setFileLoggingEnabled(self.debugFileLoggingEnabled)
         userDefaults.removeObject(forKey: "showCodexUsage")
         userDefaults.removeObject(forKey: "showClaudeUsage")
-        LaunchAtLoginManager.setEnabled(self.launchAtLogin)
+        LaunchAtLoginManager.reconcile(self.launchAtLogin)
         self.runInitialProviderDetectionIfNeeded()
         self.ensureAlibabaProviderAutoEnabledIfNeeded()
         self.applyTokenCostDefaultIfNeeded()

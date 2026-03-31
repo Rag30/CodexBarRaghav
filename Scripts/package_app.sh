@@ -132,11 +132,18 @@ fi
 if [[ "$SIGNING_MODE" == "adhoc" ]]; then
   FEED_URL=""
   AUTO_CHECKS=false
+  # Use a distinct bundle ID for ad-hoc builds to avoid macOS status-item
+  # blacklisting caused by repeated re-signing with different identities.
+  if [[ "$BUNDLE_ID" == "com.steipete.codexbar" ]]; then
+    BUNDLE_ID="com.steipete.codexbar.dev"
+  fi
 fi
 WIDGET_BUNDLE_ID="${BUNDLE_ID}.widget"
 APP_GROUP_ID="group.com.steipete.codexbar"
 if [[ "$BUNDLE_ID" == *".debug"* ]]; then
   APP_GROUP_ID="group.com.steipete.codexbar.debug"
+elif [[ "$BUNDLE_ID" == *".dev"* ]]; then
+  APP_GROUP_ID="group.com.steipete.codexbar.dev"
 fi
 ENTITLEMENTS_DIR="$ROOT/.build/entitlements"
 APP_ENTITLEMENTS="${ENTITLEMENTS_DIR}/CodexBar.entitlements"

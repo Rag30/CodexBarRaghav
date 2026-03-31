@@ -807,20 +807,10 @@ public struct CursorStatusProbe: Sendable {
     }
 
     private func fetchWithCookieHeader(_ cookieHeader: String) async throws -> CursorStatusSnapshot {
-        // Run usage + user info in parallel, but if `fetchUsageSummary` throws we must still await
-        // `fetchUserInfo` — otherwise Swift reports a fatal concurrency error (async let leak).
-        async let usageSummaryTask = self.fetchUsageSummary(cookieHeader: cookieHeader)
-        async let userInfoTask = self.fetchUserInfo(cookieHeader: cookieHeader)
-
-        let usagePair: (CursorUsageSummary, String)
-        do {
-            usagePair = try await usageSummaryTask
-        } catch {
-            _ = try? await userInfoTask
-            throw error
-        }
-        let (usageSummary, rawJSON) = usagePair
-        let userInfo = try? await userInfoTask
+        // Run sequentially to avoid the swift_task_dealloc crash that `async let`
+        // triggers in release builds when a child task throws during scope cleanup.
+        let (usageSummary, rawJSON) = try await self.fetchUsageSummary(cookieHeader: cookieHeader)
+        let userInfo = try? await self.fetchUserInfo(cookieHeader: cookieHeader)
 
         // Fetch legacy request usage only if user has a sub ID.
         // Uses try? to avoid breaking the flow for users where this endpoint fails or returns unexpected data.
