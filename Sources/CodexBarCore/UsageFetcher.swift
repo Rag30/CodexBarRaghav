@@ -310,6 +310,83 @@ private enum RPCWireError: Error, LocalizedError {
     }
 }
 
+enum CodexRPCOutputFramer {
+    static func appendAndDrainLines(buffer: inout Data, data: Data) -> [Data] {
+        buffer.append(data)
+        var out: [Data] = []
+        while let newline = buffer.firstIndex(of: 0x0A) {
+            let lineData = Data(buffer[..<newline])
+            buffer.removeSubrange(...newline)
+            if !lineData.isEmpty {
+                out.append(lineData)
+            }
+        }
+        return out
+    }
+
+    static func drainRemainder(buffer: inout Data) -> Data? {
+        guard !buffer.isEmpty else { return nil }
+        let remainder = Data(buffer)
+        buffer.removeAll(keepingCapacity: false)
+        return remainder
+    }
+}
+
+enum CodexRPCRetryPolicy {
+    private static let log = CodexBarLog.logger(LogCategories.codexRPC)
+    private static let defaultRetryDelayNanoseconds: UInt64 = 150_000_000
+    private static let defaultMaxAttempts: Int = 2
+
+    static func shouldRetry(_ error: Error) -> Bool {
+        let message = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard message.localizedCaseInsensitiveContains("Codex returned invalid data:") else { return false }
+        return message.localizedCaseInsensitiveContains("closed stdout")
+    }
+
+    static func run<T>(
+        maxAttempts: Int = defaultMaxAttempts,
+        retryDelayNanoseconds: UInt64 = defaultRetryDelayNanoseconds,
+        attempt: @escaping () async throws -> T) async throws -> T
+    {
+        precondition(maxAttempts > 0, "Codex RPC retry policy requires at least one attempt.")
+        var lastError: Error?
+
+        for index in 0..<maxAttempts {
+            do {
+                return try await attempt()
+            } catch {
+                lastError = error
+                let hasAnotherAttempt = index + 1 < maxAttempts
+                guard hasAnotherAttempt, self.shouldRetry(error) else {
+                    throw error
+                }
+
+                self.log.debug(
+                    "Retrying transient Codex RPC failure",
+                    metadata: [
+                        "attempt": "\(index + 1)",
+                        "maxAttempts": "\(maxAttempts)",
+                        "error": error.localizedDescription,
+                    ])
+                if retryDelayNanoseconds > 0 {
+                    try? await Task.sleep(nanoseconds: retryDelayNanoseconds)
+                }
+            }
+        }
+
+        if let lastError {
+            throw lastError
+        }
+        throw RPCWireError.malformed("Codex RPC retry policy exhausted without an error")
+    }
+}
+
+private struct CodexRPCSnapshot {
+    let rateLimits: RPCRateLimitSnapshot
+    let account: RPCAccountResponse?
+    let updatedAt: Date
+}
+
 /// RPC helper used on background tasks; safe because we confine it to the owning task.
 private final class CodexRPCClient: @unchecked Sendable {
     private static let log = CodexBarLog.logger(LogCategories.codexRPC)
@@ -328,17 +405,13 @@ private final class CodexRPCClient: @unchecked Sendable {
         func appendAndDrainLines(_ data: Data) -> [Data] {
             self.lock.lock()
             defer { self.lock.unlock() }
+            return CodexRPCOutputFramer.appendAndDrainLines(buffer: &self.buffer, data: data)
+        }
 
-            self.buffer.append(data)
-            var out: [Data] = []
-            while let newline = self.buffer.firstIndex(of: 0x0A) {
-                let lineData = Data(self.buffer[..<newline])
-                self.buffer.removeSubrange(...newline)
-                if !lineData.isEmpty {
-                    out.append(lineData)
-                }
-            }
-            return out
+        func drainRemainder() -> Data? {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            return CodexRPCOutputFramer.drainRemainder(buffer: &self.buffer)
         }
     }
 
@@ -396,6 +469,9 @@ private final class CodexRPCClient: @unchecked Sendable {
             let data = handle.availableData
             if data.isEmpty {
                 handle.readabilityHandler = nil
+                if let trailingLine = stdoutBuffer.drainRemainder(), !trailingLine.isEmpty {
+                    stdoutLineContinuation.yield(trailingLine)
+                }
                 stdoutLineContinuation.finish()
                 return
             }
@@ -537,36 +613,28 @@ public struct UsageFetcher: Sendable {
     }
 
     private func loadRPCUsage() async throws -> UsageSnapshot {
-        let rpc = try CodexRPCClient(environment: self.environment)
-        defer { rpc.shutdown() }
+        let rpcSnapshot = try await self.loadRPCSnapshot()
 
-        try await rpc.initialize(clientName: "codexbar", clientVersion: "0.5.4")
-        // The app-server answers on a single stdout stream, so keep requests
-        // serialized to avoid starving one reader when multiple awaiters race
-        // for the same pipe.
-        let limits = try await rpc.fetchRateLimits().rateLimits
-        let account = try? await rpc.fetchAccount()
-
-        guard let primary = Self.makeWindow(from: limits.primary),
-              let secondary = Self.makeWindow(from: limits.secondary)
+        guard let primary = Self.makeWindow(from: rpcSnapshot.rateLimits.primary),
+              let secondary = Self.makeWindow(from: rpcSnapshot.rateLimits.secondary)
         else {
             throw UsageError.noRateLimitsFound
         }
 
         let identity = ProviderIdentitySnapshot(
             providerID: .codex,
-            accountEmail: account?.account.flatMap { details in
+            accountEmail: rpcSnapshot.account?.account.flatMap { details in
                 if case let .chatgpt(email, _) = details { email } else { nil }
             },
             accountOrganization: nil,
-            loginMethod: account?.account.flatMap { details in
+            loginMethod: rpcSnapshot.account?.account.flatMap { details in
                 if case let .chatgpt(_, plan) = details { plan } else { nil }
             })
         return UsageSnapshot(
             primary: primary,
             secondary: secondary,
             tertiary: nil,
-            updatedAt: Date(),
+            updatedAt: rpcSnapshot.updatedAt,
             identity: identity)
     }
 
@@ -604,13 +672,10 @@ public struct UsageFetcher: Sendable {
     }
 
     private func loadRPCCredits() async throws -> CreditsSnapshot {
-        let rpc = try CodexRPCClient(environment: self.environment)
-        defer { rpc.shutdown() }
-        try await rpc.initialize(clientName: "codexbar", clientVersion: "0.5.4")
-        let limits = try await rpc.fetchRateLimits().rateLimits
-        guard let credits = limits.credits else { throw UsageError.noRateLimitsFound }
+        let rpcSnapshot = try await self.loadRPCSnapshot()
+        guard let credits = rpcSnapshot.rateLimits.credits else { throw UsageError.noRateLimitsFound }
         let remaining = Self.parseCredits(credits.balance)
-        return CreditsSnapshot(remaining: remaining, events: [], updatedAt: Date())
+        return CreditsSnapshot(remaining: remaining, events: [], updatedAt: rpcSnapshot.updatedAt)
     }
 
     private func loadTTYCredits(keepCLISessionsAlive: Bool) async throws -> CreditsSnapshot {
@@ -647,6 +712,24 @@ public struct UsageFetcher: Sendable {
             return String(data: data, encoding: .utf8) ?? "<unprintable>"
         } catch {
             return "Codex RPC probe failed: \(error)"
+        }
+    }
+
+    private func loadRPCSnapshot() async throws -> CodexRPCSnapshot {
+        try await CodexRPCRetryPolicy.run {
+            let rpc = try CodexRPCClient(environment: self.environment)
+            defer { rpc.shutdown() }
+
+            try await rpc.initialize(clientName: "codexbar", clientVersion: "0.5.4")
+            // The app-server answers on a single stdout stream, so keep requests
+            // serialized to avoid starving one reader when multiple awaiters race
+            // for the same pipe.
+            let limits = try await rpc.fetchRateLimits().rateLimits
+            let account = try? await rpc.fetchAccount()
+            return CodexRPCSnapshot(
+                rateLimits: limits,
+                account: account,
+                updatedAt: Date())
         }
     }
 

@@ -69,6 +69,7 @@ extension SettingsStore {
     {
         self.activeCodexAPIKey(baseEnvironment: baseEnvironment) != nil
     }
+
     func setActiveTokenAccountIndex(_ index: Int, for provider: UsageProvider) {
         guard let data = self.tokenAccountsData(for: provider), !data.accounts.isEmpty else { return }
         // index == -1 means "use default account" (no CODEX_HOME override)
@@ -246,6 +247,7 @@ extension SettingsStore {
         else { return }
         ProviderCatalog.implementation(for: provider)?.applyTokenAccountCookieSource(settings: self)
     }
+
     func repairCodexShellIntegrationIfNeeded() {
         guard !Self.isRunningTests else { return }
 

@@ -123,7 +123,9 @@ struct CodexProviderImplementation: ProviderImplementation {
                 id: "codex-multiple-accounts",
                 title: "Multiple Accounts",
                 subtitle:
-                "Enable multi-account support: add, reorder, and switch between multiple Codex accounts. Costs are disabled for accounts configured without the default machine codex home path (~/.codex).",
+                "Enable multi-account support: add, reorder, and switch between multiple Codex accounts. " +
+                    "Costs are disabled for accounts configured without the default machine codex home path " +
+                    "(~/.codex).",
                 binding: multipleAccountsBinding,
                 statusText: nil,
                 actions: [],

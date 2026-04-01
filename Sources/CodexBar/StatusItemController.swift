@@ -393,7 +393,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         // `enabledProvidersForDisplay()` is wrong when that list is empty (e.g. enablement
         // keys missing → false) while Codex fallback would still show an icon in split mode.
         let anyProviderWouldShow = self.anyMenuBarProviderShouldShow()
-        
+
         if mergeIcons {
             self.statusItem.isVisible = anyProviderWouldShow
             for item in self.statusItems.values {
